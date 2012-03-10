@@ -60,12 +60,20 @@ class Build(Command):
                                     ['hardware', 'arduino', 'variants'],
                                     human_name='Arduino variants directory')
 
-        toolset = [
-            ('cc', 'avr-gcc'),
-            ('cxx', 'avr-g++'),
-            ('ar', 'avr-ar'),
-            ('objcopy', 'avr-objcopy'),
-        ]
+        if platform.system() != 'Windows':
+            toolset = [
+                ('cc', 'avr-gcc'),
+                ('cxx', 'avr-g++'),
+                ('ar', 'avr-ar'),
+                ('objcopy', 'avr-objcopy')
+            ]
+        else:
+            toolset = [
+                ('cc', 'avr-gcc.exe'),
+                ('cxx', 'avr-g++.exe'),
+                ('ar', 'avr-ar.exe'),
+                ('objcopy', 'avr-objcopy.exe')
+            ]
 
         # Linux has system-wide avr gcc toolset
         # other platforms are bundled with it as a part of Arduino Software
@@ -77,6 +85,11 @@ class Build(Command):
             else:
                 self.e.find_arduino_tool(tool_key, ['hardware', 'tools', 'avr', 'bin'], 
                                          items=[tool_binary], human_name=tool_binary)
+        if system_wide:
+            self.e.find_tool('make', ['make'], human_name='make')
+        else:
+            self.e.find_arduino_tool('make', ['hardware', 'tools', 'avr', 'utils', 'bin'], 
+                                     items=['make.exe'], human_name='make')
 
     def setup_flags(self, board_key):
         board = self.e.board_model(board_key)
@@ -128,6 +141,9 @@ class Build(Command):
     def render_template(self, source, target, **ctx):
         template = self.jenv.get_template(source)
         contents = template.render(**ctx)
+        if platform.system() == 'Windows':
+            contents = contents.replace('mkdir -p', 'mkdir').replace('echo -n', 'echo | set /p=').replace('mv', 'move')
+            contents = contents.replace('cat ', self.e['make'].replace('make.exe', 'cat.exe')+' ')
         out_path = os.path.join(self.e['build_dir'], target)
         with open(out_path, 'wt') as f:
             f.write(contents)
@@ -136,7 +152,11 @@ class Build(Command):
 
     def make(self, makefile, **kwargs):
         makefile = self.render_template(makefile + '.jinja', makefile, **kwargs)
-        ret = subprocess.call(['make', '-f', makefile, 'all'])
+        if platform.system() != "Windows":
+            ret = subprocess.call(['make', '-f', makefile, 'all'])
+        else:
+            ret = subprocess.call([self.e['make'], '-f', makefile, 'all'])
+
         if ret != 0:
             raise Abort("Make failed with code %s" % ret)
 

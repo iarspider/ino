@@ -4,6 +4,7 @@ import sys
 import os.path
 import fnmatch
 import functools
+import platform
 
 from ino.utils import FileMap, SpaceList
 
@@ -98,7 +99,7 @@ def libmap(source_dirs, target_dir):
 
 @filter
 def colorize(s, color):
-    if not sys.stdout.isatty():
+    if (not sys.stdout.isatty()) or (platform.system() == 'Windows'):
         return s
 
     ccodes = {

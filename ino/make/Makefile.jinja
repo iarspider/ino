@@ -8,7 +8,7 @@
 {% for source, target in filemap.items() %}
 {{ target.path }} : {{ source.path }}
 	@echo {{ (source.dirname|basename|pjoin(source.filename))|colorize('yellow') }}
-	@mkdir -p {{ target.path|dirname }}
+	@if not exist {{ target.path|dirname }} mkdir -p {{ target.path|dirname }}
 	{{v}}{{ compiler }} {{ iquote(source) }} -o $@ -c {{ source.path }}
 include {{ target.path|depsname }}
 {% endfor %}

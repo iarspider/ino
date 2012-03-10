@@ -4,7 +4,7 @@
 {% set sketches = e.src_dir|glob('*.pde', '*.ino')|filemap(src_build_dir, e.names.cpp) %}
 {% for source, target in sketches.iterpaths() %}
 {{ target }} : {{ source }}
-	@mkdir -p {{ target|dirname }}
+	@if not exist {{ target|dirname }} mkdir -p {{ target|dirname }}
 	@echo {{ source|colorize('yellow') }}
 	{{v}}{{ e.ino }} preproc {% if 'arduino_dist_dir' in e %}-d {{ e['arduino_dist_dir'] }}{% endif %} -o $@ $^
 {% endfor %}

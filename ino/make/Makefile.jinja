@@ -7,8 +7,8 @@
 {% macro compile(filemap, compiler) %}
 {% for source, target in filemap.items() %}
 {{ target.path }} : {{ source.path }}
-	@echo {{ (source.dirname|basename|pjoin(source.filename))|colorize('yellow') }}
-	@if not exist {{ target.path|dirname }} mkdir -p {{ target.path|dirname }}
+	@"{{e.echo}}" {{ (source.dirname|basename|pjoin(source.filename))|colorize('yellow') }}
+	@"{{e.mkdir}}" -p {{ target.path|dirname }}
 	{{v}}{{ compiler }} {{ iquote(source) }} -o $@ -c {{ source.path }}
 include {{ target.path|depsname }}
 {% endfor %}
@@ -33,7 +33,7 @@ include {{ target.path|depsname }}
 {{ compile_c(c) }}
 {{ compile_cpp(cpp) }}
 {{ target.path }} : {{ libobjs }}
-	@echo {{ ('Linking ' ~ target.filename|basename)|colorize('green') }}
+	@"{{e.echo}}" {{ ('Linking ' ~ target.filename|basename)|colorize('green') }}
 	{{v}}{{ e.ar }} rcs $@ $^
 {% endfor %}
 
@@ -55,14 +55,14 @@ include {{ target.path|depsname }}
 {% set objs = c.target_paths() + cpp.target_paths() + libs.target_paths() %}
 {% set elf = e.build_dir|pjoin('firmware.elf') %}
 {{ elf }} : {{ objs }}
-	@echo {{ 'Linking firmware.elf'|colorize('green') }}
+	@"{{e.echo}}" {{ 'Linking firmware.elf'|colorize('green') }}
 	{{v}}{{ e.cc }} {{ e.elfflags }} -o $@ $^ -lm
 
 {#
  #   elf -> hex
  #}
 {{ e.hex_path }} : {{ elf }}
-	@echo {{ ('Converting to ' ~ e.hex_filename)|colorize('green') }}
+	@"{{e.echo}}" {{ ('Converting to ' ~ e.hex_filename)|colorize('green') }}
 	{{v}}{{ e.objcopy }} -O ihex -R .eeprom $^ $@
 
 include {{ e.deps }}

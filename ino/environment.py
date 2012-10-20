@@ -6,6 +6,7 @@ import itertools
 import argparse
 import pickle
 import platform
+import hashlib
 import re
 
 try:
@@ -15,6 +16,7 @@ except ImportError:
     from ordereddict import OrderedDict
 
 from collections import namedtuple
+from glob import glob
 
 from ino.filters import colorize
 from ino.utils import format_available_options
@@ -51,7 +53,7 @@ class Version(namedtuple('Version', 'major minor')):
 class Environment(dict):
 
     templates_dir = os.path.join(os.path.dirname(__file__), 'templates')
-    build_dir = '.build'
+    output_dir = '.build'
     src_dir = 'src'
     lib_dir = 'lib'
     hex_filename = 'firmware.hex'
@@ -69,7 +71,7 @@ class Environment(dict):
     ino = sys.argv[0]
 
     def dump(self):
-        if not os.path.isdir(self.build_dir):
+        if not os.path.isdir(self.output_dir):
             return
         with open(self.dump_filepath, 'wb') as f:
             pickle.dump(self.items(), f)
@@ -86,7 +88,7 @@ class Environment(dict):
 
     @property
     def dump_filepath(self):
-        return os.path.join(self.build_dir, 'environment.pickle')
+        return os.path.join(self.output_dir, 'environment.pickle')
 
     def __getitem__(self, key):
         try:
@@ -146,8 +148,10 @@ class Environment(dict):
     def find_arduino_file(self, key, dirname_parts, items=None, human_name=None):
         return self.find_file(key, items, self._arduino_dist_places(dirname_parts), human_name)
 
-    def find_arduino_tool(self, key, filename_parts, items=None, human_name=None):
-        return self.find_arduino_file(key, filename_parts, items, human_name)
+    def find_arduino_tool(self, key, dirname_parts, items=None, human_name=None):
+        # if not bundled with Arduino Software the tool should be searched on PATH
+        places = self._arduino_dist_places(dirname_parts) + ['$PATH']
+        return self.find_file(key, items, places, human_name)
 
     def _arduino_dist_places(self, dirname_parts):
         """
@@ -207,27 +211,33 @@ class Environment(dict):
         parser.add_argument('-d', '--arduino-dist', metavar='PATH', 
                             help='Path to Arduino distribution, e.g. ~/Downloads/arduino-0022.\nTry to guess if not specified')
 
-    def guess_serial_port(self):
-        from glob import glob
-
-        print 'Guessing serial port ...',
+    def serial_port_patterns(self):
         system = platform.system()
         if system == 'Linux':
-            patterns = ['/dev/ttyACM*', '/dev/ttyUSB*']
-        elif system == 'Darwin':
-            patterns = ['/dev/tty.usbmodem*', '/dev/tty.usbserial*']
+            return ['/dev/ttyACM*', '/dev/ttyUSB*']
+        if system == 'Darwin':
+            return ['/dev/tty.usbmodem*', '/dev/tty.usbserial*']
+        raise NotImplementedError("Not implemented for Windows")
 
-        for p in patterns:
+    def list_serial_ports(self):
+        ports = []
+        for p in self.serial_port_patterns():
             matches = glob(p)
-            if not matches:
-                continue
-            result = matches[0]
+            ports.extend(matches)
+        return ports
+
+    def guess_serial_port(self):
+        print 'Guessing serial port ...',
+
+        ports = self.list_serial_ports()
+        if ports:
+            result = ports[0]
             print colorize(result, 'yellow')
             return result
 
         print colorize('FAILED', 'red')
         raise Abort("No device matching following was found: %s" %
-                    (''.join(['\n  - ' + p for p in patterns])))
+                    (''.join(['\n  - ' + p for p in self.serial_port_patterns()])))
 
     def process_args(self, args):
         arduino_dist = getattr(args, 'arduino_dist', None)
@@ -241,6 +251,15 @@ class Environment(dict):
                 print "Supported Arduino board models are:"
                 print all_models.format()
                 raise Abort('%s is not a valid board model' % board_model)
+
+        # Build artifacts for each Arduino distribution / Board model
+        # pair should go to a separate subdirectory
+        build_dirname = board_model or self.default_board_model
+        if arduino_dist:
+            hash = hashlib.md5(arduino_dist).hexdigest()[:8]
+            build_dirname = '%s-%s' % (build_dirname, hash)
+
+        self['build_dir'] = os.path.join(self.output_dir, build_dirname)
 
     @property
     def arduino_lib_version(self):

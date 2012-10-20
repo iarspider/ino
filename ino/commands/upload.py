@@ -36,12 +36,16 @@ class Upload(Command):
         self.e.add_arduino_dist_arg(parser)
 
     def discover(self):
-        self.e.find_tool('stty', ['stty'])
-        if platform.system() == 'Linux':
-            self.e.find_arduino_tool('avrdude', ['hardware', 'tools'])
-            self.e.find_arduino_file('avrdude.conf', ['hardware', 'tools'])
+        if platform.system() != 'Windows':
+            self.e.find_tool('stty', ['stty'])
+            if platform.system() == 'Linux':
+                self.e.find_arduino_tool('avrdude', ['hardware', 'tools'])
+                self.e.find_arduino_file('avrdude.conf', ['hardware', 'tools'])
+            else:
+                self.e.find_arduino_tool('avrdude', ['hardware', 'tools', 'avr', 'bin'])
+                self.e.find_arduino_file('avrdude.conf', ['hardware', 'tools', 'avr', 'etc'])
         else:
-            self.e.find_arduino_tool('avrdude', ['hardware', 'tools', 'avr', 'bin'])
+            self.e.find_arduino_tool('avrdude', ['hardware', 'tools', 'avr', 'bin'], items=['avrdude.exe'])
             self.e.find_arduino_file('avrdude.conf', ['hardware', 'tools', 'avr', 'etc'])
     
     def run(self, args):
@@ -55,14 +59,19 @@ class Upload(Command):
             # try v2 first and fail
             protocol = 'stk500v1'
 
-        if not os.path.exists(port):
-            raise Abort("%s doesn't exist. Is Arduino connected?" % port)
 
-        # send a hangup signal when the last process closes the tty
-        file_switch = '-f' if platform.system() == 'Darwin' else '-F'
-        ret = subprocess.call([self.e['stty'], file_switch, port, 'hupcl'])
-        if ret:
-            raise Abort("stty failed")
+
+        if platform.system() != 'Windows':
+            # This won't work on Windows!
+            if not os.path.exists(port):
+                raise Abort("%s doesn't exist. Is Arduino connected?" % port)
+            
+            # No stty on windows!
+            # send a hangup signal when the last process closes the tty
+            file_switch = '-f' if platform.system() == 'Darwin' else '-F'
+            ret = subprocess.call([self.e['stty'], file_switch, port, 'hupcl'])
+            if ret:
+                raise Abort("stty failed")
 
         # pulse on DTR
         try:
